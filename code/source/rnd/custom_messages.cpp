@@ -325,15 +325,16 @@ public:
     addCom(0x31, 0x00);
     return addCom(0x02);
   }
-  // MsgBuilder* furiganaOpen() {
-  //   return addCom(0x3B);
-  // }
-  // MsgBuilder* furiganaSwitch() {
-  //   return addCom(0x00);
-  // }
-  // MsgBuilder* furiganaClose() {
-  //   return addCom(0x3C);
-  // }
+  MsgBuilder* furiganaOpen() {
+    return addCom(0x3B);
+  }
+  MsgBuilder* furiganaSwitch() {
+    addChr(0x00);
+    return addChr(0x00);
+  }
+  MsgBuilder* furiganaClose() {
+    return addCom(0x3C);
+  }
 
   void format(volatile const UnformattedMessage* msg) {
     // @ - filename min: 4px max: 120px
@@ -353,7 +354,7 @@ public:
     u16 delayIdx = 0, delayIdxAtLastSpace = 0;
     u16 sizeAtLastSpace = 0, resolvedChar = 0, lineLen = LINE_PADDING(*msg);
     bool inCol = false, inColAtLastSpace = false;
-    // bool inFuriganaMode = false;
+    char inFuriganaMode = 0;
     bool lineWrap = true;
     u16 sfx = msg->sfxAndFlags & 0x3FFF;
     u8 resolvedCol = 0, resolvedIcon = 0, resolvedDelay = 0;
@@ -504,6 +505,26 @@ public:
         }
         break;
 
+      case ';':  // Furigana three-way split
+        if (game::MessageMgr::Instance().lang == game::Language::JpJp) {
+          switch (inFuriganaMode) {
+            case 0:
+              furiganaOpen();
+              inFuriganaMode++;
+              break;
+            case 1:
+              furiganaSwitch();
+              inFuriganaMode++;
+              break;
+            default:
+              if (!lastSpaceIdx)
+                sizeAtLastSpace = *size;
+              furiganaClose();
+              inFuriganaMode = 0;
+          }
+          break;
+        }
+
       case ' ':
         // Keep track of spaces for inserting line breaks
         lastSpaceIdx = idx;
@@ -559,7 +580,8 @@ public:
         } else
           addChr(text[idx]);
         // Assumes all further chars will be represented by * as many up to MAX_CHAR already are
-        lineLen += (resolvedChar < MAX_CHAR) ? width[resolvedChar] : DEFAULT_WIDTH;
+        if (!inFuriganaMode)
+          lineLen += (resolvedChar < MAX_CHAR) ? width[resolvedChar] : DEFAULT_WIDTH;
         break;
       }
 
